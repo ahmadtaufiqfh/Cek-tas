@@ -1,281 +1,171 @@
-local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local WebhookURL = "https://discord.com/api/webhooks/1455443365964419264/BUP-YUDGDbCZp6XiVaqDyC62_OWh8N_aOTFotkzs5qwujXzYgnzDSXbiBmjNt9QyccDs"
-
 -- ==========================================
--- PEMBUATAN UI (USER INTERFACE)
+-- PEMBUATAN UI (USER INTERFACE) SNIPER
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
 local MainFrame = Instance.new("Frame")
 local TitleLabel = Instance.new("TextLabel")
 local StatusLabel = Instance.new("TextLabel") 
-local CheckButton = Instance.new("TextButton")
-local UICorner1 = Instance.new("UICorner")
-local UICorner2 = Instance.new("UICorner")
+local Button1 = Instance.new("TextButton")
+local Button2 = Instance.new("TextButton")
 
-ScreenGui.Name = "RadarIkanUI"
-local successGui, errGui = pcall(function()
-    ScreenGui.Parent = (gethui and gethui()) or CoreGui
-end)
-if not successGui then
-    ScreenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
-end
+ScreenGui.Name = "SniperRadarUI"
+local successGui, _ = pcall(function() ScreenGui.Parent = (gethui and gethui()) or CoreGui end)
+if not successGui then ScreenGui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui") end
 
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = ScreenGui
-MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
-MainFrame.Position = UDim2.new(0.5, -100, 0.8, -70)
-MainFrame.Size = UDim2.new(0, 200, 0, 130)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+MainFrame.Position = UDim2.new(0.5, -100, 0.7, 0)
+MainFrame.Size = UDim2.new(0, 220, 0, 160)
 MainFrame.Active = true
 MainFrame.Draggable = true 
 
+local UICorner1 = Instance.new("UICorner")
 UICorner1.Parent = MainFrame
-UICorner1.CornerRadius = UDim.new(0, 10)
+UICorner1.CornerRadius = UDim.new(0, 8)
 
 TitleLabel.Name = "TitleLabel"
 TitleLabel.Parent = MainFrame
-TitleLabel.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+TitleLabel.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
 TitleLabel.Size = UDim2.new(1, 0, 0, 30)
 TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.Text = "Radar Fishit"
+TitleLabel.Text = "🎯 SNIPER DIRECTORY"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 14
-
+local UICorner2 = Instance.new("UICorner")
 UICorner2.Parent = TitleLabel
-UICorner2.CornerRadius = UDim.new(0, 10)
+UICorner2.CornerRadius = UDim.new(0, 8)
 
 StatusLabel.Name = "StatusLabel"
 StatusLabel.Parent = MainFrame
 StatusLabel.BackgroundTransparency = 1
 StatusLabel.Position = UDim2.new(0, 0, 0, 35)
-StatusLabel.Size = UDim2.new(1, 0, 0, 25)
+StatusLabel.Size = UDim2.new(1, 0, 0, 35)
 StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.Text = "Mode: Directory Locator"
+StatusLabel.Text = "Menunggu perintah..."
 StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 StatusLabel.TextSize = 11
 StatusLabel.TextWrapped = true
 
-CheckButton.Name = "CheckButton"
-CheckButton.Parent = MainFrame
-CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-CheckButton.Position = UDim2.new(0.1, 0, 0.55, 0)
-CheckButton.Size = UDim2.new(0.8, 0, 0, 40)
-CheckButton.Font = Enum.Font.GothamBold
-CheckButton.Text = "Cari Tas & Kirim"
-CheckButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-CheckButton.TextSize = 14
+-- Tombol 1: Snapshot Awal
+Button1.Parent = MainFrame
+Button1.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+Button1.Position = UDim2.new(0.05, 0, 0.45, 0)
+Button1.Size = UDim2.new(0.9, 0, 0, 35)
+Button1.Font = Enum.Font.GothamBold
+Button1.Text = "1. REKAM (Tas Tertutup)"
+Button1.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button1.TextSize = 13
+local UIC1 = Instance.new("UICorner") UIC1.Parent = Button1
 
-local UICorner3 = Instance.new("UICorner")
-UICorner3.Parent = CheckButton
-UICorner3.CornerRadius = UDim.new(0, 8)
+-- Tombol 2: Sniper Target
+Button2.Parent = MainFrame
+Button2.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
+Button2.Position = UDim2.new(0.05, 0, 0.70, 0)
+Button2.Size = UDim2.new(0.9, 0, 0, 35)
+Button2.Font = Enum.Font.GothamBold
+Button2.Text = "2. SNIPER (Tas Terbuka)"
+Button2.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button2.TextSize = 13
+local UIC2 = Instance.new("UICorner") UIC2.Parent = Button2
 
 -- ==========================================
--- LOGIKA PENCARIAN DIREKTORI & PENCOCOKAN KAMUS
+-- LOGIKA DEEP SCREENING (SNAPSHOT & DIFF)
 -- ==========================================
 
-local function buildFishDictionary()
-    local validFishNames = {}
-    local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
-    
-    if itemsFolder then
-        for _, item in pairs(itemsFolder:GetChildren()) do
-            table.insert(validFishNames, item.Name)
-        end
-        -- Urutkan nama dari terpanjang ke terpendek agar akurat saat filtering
-        table.sort(validFishNames, function(a, b) return string.len(a) > string.len(b) end)
-    end
-    return validFishNames
-end
+local SnapshotMemory = {}
+local isArmed = false
 
-local function locateAndReadInventory(player, validFishNames)
-    local bestDirectory = nil
-    local highestMatchScore = 0
-    local totalItemsInDir = 0
-
-    -- 1. MENCARI DIREKTORI TAS (Auto-Locate)
-    -- Kita scan semua folder di dalam data pemain
-    local scanTargets = player:GetDescendants()
+-- Fungsi memfoto kondisi data memori game
+local function takeDeepSnapshot()
+    local data = {}
+    local targets = {Players.LocalPlayer, ReplicatedStorage}
     
-    for _, obj in pairs(scanTargets) do
-        -- Cari tempat yang bisa menampung banyak item (Folder, Configuration, Model)
-        if obj:IsA("Folder") or obj:IsA("Configuration") or obj:IsA("Model") then
-            local matchScore = 0
-            local itemCount = 0
-            
-            -- Cek isi folder ini, apakah isinya adalah ikan-ikan kita?
-            pcall(function()
-                for _, item in pairs(obj:GetChildren()) do
-                    itemCount = itemCount + 1
-                    local itemNameLower = string.lower(item.Name)
-                    
-                    -- Cek apakah nama objek ini ada di kamus ikan
-                    for _, fishName in ipairs(validFishNames) do
-                        if string.find(itemNameLower, string.lower(fishName), 1, true) then
-                            matchScore = matchScore + 1
-                            break
-                        end
-                    end
+    for _, root in ipairs(targets) do
+        for _, obj in ipairs(root:GetDescendants()) do
+            -- KITA ABAIKAN FILE UI GAMBAR AGAR FOKUS KE DATA MURNI
+            if not obj:IsA("GuiObject") and not obj:IsA("UIBase") then
+                -- Jika berupa Folder/Model, catat jumlah isinya
+                if obj:IsA("Folder") or obj:IsA("Model") or obj:IsA("Configuration") then
+                    data[obj:GetFullName()] = "Isi: " .. #obj:GetChildren()
+                -- Jika berupa Angka/Teks, catat nilainya
+                elseif obj:IsA("ValueBase") then
+                    data[obj:GetFullName()] = "Value: " .. tostring(obj.Value)
                 end
-            end)
-
-            -- Jika folder ini punya banyak ikan (lebih dari 5) dan mengalahkan folder lain,
-            -- maka ini dipastikan adalah Direktori Tas yang asli!
-            if matchScore > highestMatchScore and matchScore > 5 then
-                highestMatchScore = matchScore
-                bestDirectory = obj
-                totalItemsInDir = itemCount
             end
         end
     end
-
-    -- Jika tas tidak ditemukan di bentuk folder fisik
-    if not bestDirectory then
-        return nil, 0, 0, "Gagal: Direktori Tas Fisik tidak ditemukan."
-    end
-
-    -- 2. MEMBACA ISI DIREKTORI TAS YANG DITEMUKAN
-    local fishCounts = {}
-    local validFishCount = 0
-
-    for _, item in pairs(bestDirectory:GetChildren()) do
-        local itemNameLower = string.lower(item.Name)
-        local foundBaseName = nil
-
-        -- Mencocokkan nama dengan kamus untuk mengabaikan varian (mutasi)
-        for _, baseName in ipairs(validFishNames) do
-            if string.find(itemNameLower, string.lower(baseName), 1, true) then
-                foundBaseName = baseName
-                break
-            end
-        end
-
-        -- Jika ikan valid, masukkan ke laporan
-        if foundBaseName then
-            fishCounts[foundBaseName] = (fishCounts[foundBaseName] or 0) + 1
-            validFishCount = validFishCount + 1
-        end
-    end
-
-    local dirPath = bestDirectory:GetFullName()
-    -- Memotong nama path jika terlalu panjang agar rapi di Discord
-    if string.len(dirPath) > 50 then
-        dirPath = "..." .. string.sub(dirPath, -47)
-    end
-
-    return fishCounts, validFishCount, totalItemsInDir, dirPath
+    return data
 end
 
-local isProcessing = false
+-- AKSI TOMBOL 1
+Button1.MouseButton1Click:Connect(function()
+    Button1.Text = "Merekam..."
+    Button1.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    
+    -- Mengambil foto memori saat tas ditutup
+    SnapshotMemory = takeDeepSnapshot()
+    isArmed = true
+    
+    StatusLabel.Text = "Rekaman Awal Disimpan! Sekarang BUKA TAS KAMU lalu klik tombol ke-2."
+    StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
+    
+    Button1.Text = "1. REKAM ULANG"
+    Button1.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+end)
 
-CheckButton.MouseButton1Click:Connect(function()
-    if isProcessing then return end
-    isProcessing = true
-    
-    local player = Players.LocalPlayer
-    
-    StatusLabel.Text = "1. Mengambil Kamus Ikan..."
-    CheckButton.Text = "Memproses..."
-    CheckButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-    task.wait(0.5) -- Sedikit delay agar UI sempat update
-    
-    local validFishNames = buildFishDictionary()
-    if #validFishNames == 0 then
-        StatusLabel.Text = "Error: Kamus Local.Storage Kosong!"
+-- AKSI TOMBOL 2
+Button2.MouseButton1Click:Connect(function()
+    if not isArmed then
+        StatusLabel.Text = "ERROR: Klik Tombol 1 dulu saat tas tertutup!"
         StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        CheckButton.Text = "Gagal"
-        task.wait(2)
-        CheckButton.Text = "Cari Tas & Kirim"
-        CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-        isProcessing = false
         return
     end
 
-    StatusLabel.Text = "2. Melacak Direktori Tas..."
-    task.wait(0.5)
+    Button2.Text = "Menganalisis Anomali..."
+    Button2.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
     
-    -- Menjalankan pencari direktori
-    local fishCounts, validFishCount, totalItemsInDir, dirPath = locateAndReadInventory(player, validFishNames)
+    -- Mengambil foto memori kedua saat tas sudah terbuka
+    local newMemory = takeDeepSnapshot()
+    local anomalies = {}
     
-    if not fishCounts then
-        StatusLabel.Text = dirPath -- Menampilkan pesan error
-        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        CheckButton.Text = "Tas Tidak Fisik"
-        task.wait(3)
-        CheckButton.Text = "Cari Tas & Kirim"
-        CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-        isProcessing = false
-        return
-    end
-
-    StatusLabel.Text = "Direktori Ditemukan!"
-    StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-    CheckButton.Text = "Mengirim Data..."
-
-    -- Menyusun Laporan
-    local description = ""
-    if validFishCount > 0 then
-        local sortedNames = {}
-        for name in pairs(fishCounts) do table.insert(sortedNames, name) end
-        table.sort(sortedNames)
-
-        for _, name in ipairs(sortedNames) do
-            description = description .. "🐟 **" .. name .. "**: " .. fishCounts[name] .. "\n"
+    -- Membandingkan perbedaan antara foto 1 dan foto 2
+    for path, dataString in pairs(newMemory) do
+        local oldDataString = SnapshotMemory[path]
+        -- Jika ada folder yang tiba-tiba isinya bertambah/berubah
+        if oldDataString and oldDataString ~= dataString then
+            table.insert(anomalies, {Path = path, Detail = oldDataString .. " -> " .. dataString})
+        -- Jika ada folder/objek data baru yang tiba-tiba tercipta
+        elseif not oldDataString then
+            table.insert(anomalies, {Path = path, Detail = "Objek Baru Muncul!"})
         end
-    else
-        description = "Tas saat ini kosong."
     end
-
-    -- Mencegah pesan error Discord karena kepanjangan
-    if string.len(description) > 3900 then
-        description = string.sub(description, 1, 3900) .. "\n\n*[Data terpotong karena batas Discord]*"
-    end
-
-    local payload = {
-        ["username"] = player.Name .. " Radar",
-        ["embeds"] = {{
-            ["title"] = "🎒 Laporan Isi Tas (Inventory)",
-            ["description"] = description,
-            ["color"] = 3447003,
-            ["footer"] = {
-                -- Menampilkan format X/Y (Valid Fish / Total Items In Folder) dan lokasi direktori
-                ["text"] = "Total Ikan: " .. validFishCount .. "/" .. totalItemsInDir .. " | Path: " .. dirPath
-            }
-        }}
-    }
-
-    local httprequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-
-    if httprequest then
-        local success, err = pcall(function()
-            httprequest({
-                Url = WebhookURL,
-                Method = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = HttpService:JSONEncode(payload)
-            })
-        end)
+    
+    -- Menampilkan Hasil
+    print("\n==================================================")
+    print("🎯 HASIL SNIPER DIRECTORY 🎯")
+    print("==================================================")
+    
+    if #anomalies > 0 then
+        StatusLabel.Text = "BERHASIL! Ditemukan " .. #anomalies .. " perubahan direktori. Cek konsol (F9)."
+        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         
-        if success then
-            CheckButton.Text = "Berhasil Dikirim!"
-            CheckButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-        else
-            CheckButton.Text = "Gagal Webhook!"
-            CheckButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+        for i, anomaly in ipairs(anomalies) do
+            print(i .. ". [LOKASI]: " .. anomaly.Path)
+            print("   [PERUBAHAN]: " .. anomaly.Detail)
+            print("--------------------------------------------------")
         end
+        print("💡 TIPS: Cari lokasi yang namanya mengandung 'Inventory', 'Storage', 'Fish', atau 'Bag'.")
     else
-        CheckButton.Text = "Executor Tdk Support"
-        CheckButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
+        StatusLabel.Text = "Tidak ada direktori data fisik yang berubah. Game menggunakan enkripsi murni."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        warn("Sniper tidak menemukan perubahan data fisik. Ini menandakan data tas dikirim dari server langsung ke dalam UI Frame (tidak disimpan di folder).")
     end
-
-    task.wait(3)
-    StatusLabel.Text = "Mode: Directory Locator"
-    StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    CheckButton.Text = "Cari Tas & Kirim"
-    CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
-    isProcessing = false
+    
+    Button2.Text = "2. SNIPER (Tas Terbuka)"
+    Button2.BackgroundColor3 = Color3.fromRGB(0, 100, 200)
 end)
