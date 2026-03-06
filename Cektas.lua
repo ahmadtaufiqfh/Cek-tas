@@ -1,6 +1,7 @@
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local WebhookURL = "https://discord.com/api/webhooks/1455443365964419264/BUP-YUDGDbCZp6XiVaqDyC62_OWh8N_aOTFotkzs5qwujXzYgnzDSXbiBmjNt9QyccDs"
 
@@ -52,7 +53,7 @@ StatusLabel.BackgroundTransparency = 1
 StatusLabel.Position = UDim2.new(0, 0, 0, 35)
 StatusLabel.Size = UDim2.new(1, 0, 0, 25)
 StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.Text = "Mode: Background Scan"
+StatusLabel.Text = "Mode: Smart Dict Match"
 StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 StatusLabel.TextSize = 11
 StatusLabel.TextWrapped = true
@@ -72,96 +73,96 @@ UICorner3.Parent = CheckButton
 UICorner3.CornerRadius = UDim.new(0, 8)
 
 -- ==========================================
--- LOGIKA PEMINDAIAN UI TERSEMBUNYI (BACKGROUND)
+-- LOGIKA PEMINDAIAN SUPER AKURAT (DICTIONARY MATCH)
 -- ==========================================
 
--- Fungsi untuk membersihkan nama ikan dari varian seperti "Big", "Shiny", "[Tag]", dll.
-local function cleanFishName(rawName)
-    local name = rawName:gsub("%[.-%]%s*", ""):gsub("%(.-%)%s*", "")
-    -- Menghapus awalan ukuran/varian yang umum ada di game memancing
-    name = name:gsub("^Big ", ""):gsub("^Huge ", ""):gsub("^Giant ", ""):gsub("^Tiny ", ""):gsub("^Shiny ", "")
-    return name
-end
+local function scanInventoryAccurately(player)
+    -- 1. Mengambil Database Nama Ikan Resmi dari Game
+    local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
+    if not itemsFolder then
+        return nil, 0, "Gagal: Folder Items tidak ditemukan"
+    end
 
--- Fungsi utama untuk membaca UI tanpa membukanya
-local function scanHiddenUI(player)
+    local validFishNames = {}
+    for _, item in pairs(itemsFolder:GetChildren()) do
+        table.insert(validFishNames, item.Name)
+    end
+
+    -- Urutkan dari nama terpanjang ke terpendek agar pencocokan akurat
+    -- (Misal: agar "Robot Kraken" tidak dibaca setengah jadi "Kraken")
+    table.sort(validFishNames, function(a, b)
+        return string.len(a) > string.len(b)
+    end)
+
+    -- 2. Mencari Wadah Grid Tas di Latar Belakang
     local playerGui = player:WaitForChild("PlayerGui")
-    local frameScores = {}
-    
-    -- Langkah 1: Mencari lokasi wadah/grid tas dengan mendeteksi teks "kg"
+    local bestGrid = nil
+    local maxKgCount = 0
+
     for _, obj in pairs(playerGui:GetDescendants()) do
-        if obj:IsA("TextLabel") then
-            local textLower = string.lower(obj.Text)
-            -- Mendeteksi format berat seperti "880K kg", "813.81K kg"
-            if string.match(textLower, "%d+%.?%d*%w*%s*kg") then
-                local card = obj.Parent
-                if card and card.Parent then
-                    local grid = card.Parent
-                    frameScores[grid] = (frameScores[grid] or 0) + 1
+        if obj:IsA("ScrollingFrame") or obj:IsA("Frame") then
+            local kgCount = 0
+            -- Hitung ada berapa tulisan "kg" di dalam frame ini
+            for _, child in pairs(obj:GetDescendants()) do
+                if child:IsA("TextLabel") and string.match(string.lower(child.Text), "kg") then
+                    kgCount = kgCount + 1
                 end
+            end
+            
+            -- Frame yang paling banyak tulisan "kg" dipastikan adalah tas inventory
+            if kgCount > maxKgCount and kgCount > 1 then
+                maxKgCount = kgCount
+                bestGrid = obj
             end
         end
     end
-    
-    -- Menentukan mana wadah tas yang asli (yang punya teks "kg" terbanyak)
-    local bestGrid = nil
-    local maxScore = 0
-    for grid, score in pairs(frameScores) do
-        if score > maxScore then
-            maxScore = score
-            bestGrid = grid
-        end
-    end
-    
+
     if not bestGrid then
-        return nil, 0, "Gagal: UI Tas belum ter-load."
+        return nil, 0, "Tas belum ter-load. Buka menu tas 1x lalu tutup."
     end
-    
-    -- Langkah 2: Mengekstrak nama ikan dari wadah tersebut
+
+    -- 3. Membaca Kotak Ikan dan Mencocokkan dengan Database
     local fishCounts = {}
     local totalFish = 0
-    
+
     for _, card in pairs(bestGrid:GetChildren()) do
         if card:IsA("GuiObject") then
-            local hasWeight = false
-            local texts = {}
+            local cardText = ""
+            local hasKg = false
             
-            -- Kumpulkan semua teks di dalam kartu ikan
+            -- Kumpulkan semua teks yang ada di kotak ikan ini
             for _, desc in pairs(card:GetDescendants()) do
                 if desc:IsA("TextLabel") then
-                    local txt = desc.Text
-                    if string.match(string.lower(txt), "%d+%.?%d*%w*%s*kg") then
-                        hasWeight = true
-                    else
-                        -- Bersihkan spasi kosong
-                        txt = string.match(txt, "^%s*(.-)%s*$")
-                        if txt and txt ~= "" then
-                            table.insert(texts, txt)
-                        end
+                    cardText = cardText .. " " .. desc.Text
+                    if string.match(string.lower(desc.Text), "kg") then
+                        hasKg = true
                     end
                 end
             end
-            
-            -- Jika kartu valid (punya berat dan teks lain)
-            if hasWeight and #texts > 0 then
-                -- Teks terpanjang pasti adalah nama ikannya (bukan label mutasi spt "Sandy")
-                local longestText = ""
-                for _, txt in pairs(texts) do
-                    if string.len(txt) > string.len(longestText) then
-                        longestText = txt
+
+            -- Jika ini benar-benar kotak ikan (karena ada informasi kg)
+            if hasKg then
+                local cardTextLower = string.lower(cardText)
+                local foundBaseName = nil
+
+                -- Cocokkan teks dengan daftar nama ikan asli
+                for _, baseName in ipairs(validFishNames) do
+                    -- Mencari nama ikan dasar di dalam seluruh teks kartu
+                    if string.find(cardTextLower, string.lower(baseName), 1, true) then
+                        foundBaseName = baseName
+                        break
                     end
                 end
-                
-                if longestText ~= "" then
-                    local fishName = cleanFishName(longestText)
-                    fishCounts[fishName] = (fishCounts[fishName] or 0) + 1
+
+                if foundBaseName then
+                    fishCounts[foundBaseName] = (fishCounts[foundBaseName] or 0) + 1
                     totalFish = totalFish + 1
                 end
             end
         end
     end
-    
-    return fishCounts, totalFish, "Data UI Hidden"
+
+    return fishCounts, totalFish, "Database Match Sukses"
 end
 
 local isProcessing = false
@@ -171,11 +172,10 @@ CheckButton.MouseButton1Click:Connect(function()
     isProcessing = true
     
     local player = Players.LocalPlayer
-    CheckButton.Text = "Memindai Background..."
+    CheckButton.Text = "Memindai Data..."
     CheckButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
     
-    -- Jalankan scanner
-    local fishCounts, totalFish, statusMsg = scanHiddenUI(player)
+    local fishCounts, totalFish, statusMsg = scanInventoryAccurately(player)
     
     if not fishCounts then
         StatusLabel.Text = statusMsg
@@ -194,11 +194,16 @@ CheckButton.MouseButton1Click:Connect(function()
 
     local description = ""
     if totalFish > 0 then
-        for name, count in pairs(fishCounts) do
-            description = description .. "🐟 **" .. name .. "**: " .. count .. "\n"
+        -- Mengurutkan nama ikan sesuai abjad untuk laporan
+        local sortedNames = {}
+        for name in pairs(fishCounts) do table.insert(sortedNames, name) end
+        table.sort(sortedNames)
+
+        for _, name in ipairs(sortedNames) do
+            description = description .. "🐟 **" .. name .. "**: " .. fishCounts[name] .. "\n"
         end
     else
-        description = "Tas saat ini kosong. Tidak ada data yang ditemukan di UI."
+        description = "Tas saat ini kosong."
     end
 
     local payload = {
@@ -208,7 +213,7 @@ CheckButton.MouseButton1Click:Connect(function()
             ["description"] = description,
             ["color"] = 3447003,
             ["footer"] = {
-                ["text"] = "Total Ikan: " .. totalFish .. " | Auto-Scrape Background"
+                ["text"] = "Total Ikan: " .. totalFish .. " | System: Dict Scrape"
             }
         }}
     }
@@ -242,7 +247,7 @@ CheckButton.MouseButton1Click:Connect(function()
     end
 
     task.wait(3)
-    StatusLabel.Text = "Mode: Background Scan"
+    StatusLabel.Text = "Mode: Smart Dict Match"
     StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     CheckButton.Text = "Cek Tas & Kirim"
     CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
