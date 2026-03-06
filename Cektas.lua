@@ -1,34 +1,35 @@
-local player = game.Players.LocalPlayer
-local targetFish = "megalodon"
-local targetFolder = "storage"
+-- Kita gunakan "leviathan" karena ada di daftar tas kamu (Big Leviathan)
+local targetFish = "leviathan"
 
-print("🔍 Memulai pelacakan untuk kata kunci: '" .. targetFish .. "' dan '" .. targetFolder .. "'...")
+print("🔍 Memulai pemindaian super untuk mencari: '" .. targetFish .. "'...")
 
-local found = false
-
--- Melacak semua yang ada di dalam LocalPlayer
-for _, item in pairs(player:GetDescendants()) do
-    local itemNameLower = string.lower(item.Name)
-    
-    -- Jika nama objek mengandung kata "megalodon" ATAU "storage"
-    if string.find(itemNameLower, targetFish) or string.find(itemNameLower, targetFolder) then
-        print("-------------------------------------------------")
-        print("✅ DITEMUKAN KECOCOKAN!")
-        print("Nama Objek : " .. item.Name)
-        print("Tipe Objek : " .. item.ClassName)
-        print("Lokasi/Path: " .. item:GetFullName())
-        
-        -- Jika objek tersebut menyimpan angka/teks (ValueBase), kita tampilkan isinya
-        if item:IsA("ValueBase") then
-            print("Isi Data   : " .. tostring(item.Value))
+local function searchDirectory(directory)
+    local foundSomething = false
+    -- Menggunakan pcall agar script tidak error jika ada folder yang dikunci game
+    pcall(function()
+        for _, item in pairs(directory:GetDescendants()) do
+            if string.find(string.lower(item.Name), string.lower(targetFish)) then
+                print("-------------------------------------------------")
+                print("✅ DITEMUKAN!")
+                print("Nama Objek : " .. item.Name)
+                print("Tipe Objek : " .. item.ClassName)
+                print("Lokasi/Path: " .. item:GetFullName())
+                if item:IsA("ValueBase") then
+                    print("Isi Value  : " .. tostring(item.Value))
+                end
+                print("-------------------------------------------------")
+                foundSomething = true
+            end
         end
-        print("-------------------------------------------------")
-        found = true
-    end
+    end)
+    return foundSomething
 end
 
-if not found then
-    warn("❌ Tidak ditemukan apapun di dalam LocalPlayer. Coba periksa apakah ikan megalodon benar-benar ada di tasmu saat ini.")
+local foundInPlayer = searchDirectory(game.Players.LocalPlayer)
+local foundInReplicated = searchDirectory(game:GetService("ReplicatedStorage"))
+
+if not foundInPlayer and not foundInReplicated then
+    warn("❌ Masih tidak ditemukan. Game mungkin menyandikan (enkripsi) nama itemnya.")
 end
 
-print("🏁 Pelacakan selesai! Buka konsol (F9) untuk melihat hasilnya.")
+print("🏁 Pelacakan selesai! Silakan cek konsol (F9).")
