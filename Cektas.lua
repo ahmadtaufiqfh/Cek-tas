@@ -53,7 +53,7 @@ StatusLabel.BackgroundTransparency = 1
 StatusLabel.Position = UDim2.new(0, 0, 0, 35)
 StatusLabel.Size = UDim2.new(1, 0, 0, 25)
 StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.Text = "Mode: Smart Dict Match"
+StatusLabel.Text = "Mode: Directory Locator"
 StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
 StatusLabel.TextSize = 11
 StatusLabel.TextWrapped = true
@@ -64,7 +64,7 @@ CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
 CheckButton.Position = UDim2.new(0.1, 0, 0.55, 0)
 CheckButton.Size = UDim2.new(0.8, 0, 0, 40)
 CheckButton.Font = Enum.Font.GothamBold
-CheckButton.Text = "Cek Tas & Kirim"
+CheckButton.Text = "Cari Tas & Kirim"
 CheckButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 CheckButton.TextSize = 14
 
@@ -73,96 +73,99 @@ UICorner3.Parent = CheckButton
 UICorner3.CornerRadius = UDim.new(0, 8)
 
 -- ==========================================
--- LOGIKA PEMINDAIAN SUPER AKURAT (DICTIONARY MATCH)
+-- LOGIKA PENCARIAN DIREKTORI & PENCOCOKAN KAMUS
 -- ==========================================
 
-local function scanInventoryAccurately(player)
-    -- 1. Mengambil Database Nama Ikan Resmi dari Game
-    local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
-    if not itemsFolder then
-        return nil, 0, "Gagal: Folder Items tidak ditemukan"
-    end
-
+local function buildFishDictionary()
     local validFishNames = {}
-    for _, item in pairs(itemsFolder:GetChildren()) do
-        table.insert(validFishNames, item.Name)
+    local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
+    
+    if itemsFolder then
+        for _, item in pairs(itemsFolder:GetChildren()) do
+            table.insert(validFishNames, item.Name)
+        end
+        -- Urutkan nama dari terpanjang ke terpendek agar akurat saat filtering
+        table.sort(validFishNames, function(a, b) return string.len(a) > string.len(b) end)
     end
+    return validFishNames
+end
 
-    -- Urutkan dari nama terpanjang ke terpendek agar pencocokan akurat
-    -- (Misal: agar "Robot Kraken" tidak dibaca setengah jadi "Kraken")
-    table.sort(validFishNames, function(a, b)
-        return string.len(a) > string.len(b)
-    end)
+local function locateAndReadInventory(player, validFishNames)
+    local bestDirectory = nil
+    local highestMatchScore = 0
+    local totalItemsInDir = 0
 
-    -- 2. Mencari Wadah Grid Tas di Latar Belakang
-    local playerGui = player:WaitForChild("PlayerGui")
-    local bestGrid = nil
-    local maxKgCount = 0
-
-    for _, obj in pairs(playerGui:GetDescendants()) do
-        if obj:IsA("ScrollingFrame") or obj:IsA("Frame") then
-            local kgCount = 0
-            -- Hitung ada berapa tulisan "kg" di dalam frame ini
-            for _, child in pairs(obj:GetDescendants()) do
-                if child:IsA("TextLabel") and string.match(string.lower(child.Text), "kg") then
-                    kgCount = kgCount + 1
-                end
-            end
+    -- 1. MENCARI DIREKTORI TAS (Auto-Locate)
+    -- Kita scan semua folder di dalam data pemain
+    local scanTargets = player:GetDescendants()
+    
+    for _, obj in pairs(scanTargets) do
+        -- Cari tempat yang bisa menampung banyak item (Folder, Configuration, Model)
+        if obj:IsA("Folder") or obj:IsA("Configuration") or obj:IsA("Model") then
+            local matchScore = 0
+            local itemCount = 0
             
-            -- Frame yang paling banyak tulisan "kg" dipastikan adalah tas inventory
-            if kgCount > maxKgCount and kgCount > 1 then
-                maxKgCount = kgCount
-                bestGrid = obj
+            -- Cek isi folder ini, apakah isinya adalah ikan-ikan kita?
+            pcall(function()
+                for _, item in pairs(obj:GetChildren()) do
+                    itemCount = itemCount + 1
+                    local itemNameLower = string.lower(item.Name)
+                    
+                    -- Cek apakah nama objek ini ada di kamus ikan
+                    for _, fishName in ipairs(validFishNames) do
+                        if string.find(itemNameLower, string.lower(fishName), 1, true) then
+                            matchScore = matchScore + 1
+                            break
+                        end
+                    end
+                end
+            end)
+
+            -- Jika folder ini punya banyak ikan (lebih dari 5) dan mengalahkan folder lain,
+            -- maka ini dipastikan adalah Direktori Tas yang asli!
+            if matchScore > highestMatchScore and matchScore > 5 then
+                highestMatchScore = matchScore
+                bestDirectory = obj
+                totalItemsInDir = itemCount
             end
         end
     end
 
-    if not bestGrid then
-        return nil, 0, "Tas belum ter-load. Buka menu tas 1x lalu tutup."
+    -- Jika tas tidak ditemukan di bentuk folder fisik
+    if not bestDirectory then
+        return nil, 0, 0, "Gagal: Direktori Tas Fisik tidak ditemukan."
     end
 
-    -- 3. Membaca Kotak Ikan dan Mencocokkan dengan Database
+    -- 2. MEMBACA ISI DIREKTORI TAS YANG DITEMUKAN
     local fishCounts = {}
-    local totalFish = 0
+    local validFishCount = 0
 
-    for _, card in pairs(bestGrid:GetChildren()) do
-        if card:IsA("GuiObject") then
-            local cardText = ""
-            local hasKg = false
-            
-            -- Kumpulkan semua teks yang ada di kotak ikan ini
-            for _, desc in pairs(card:GetDescendants()) do
-                if desc:IsA("TextLabel") then
-                    cardText = cardText .. " " .. desc.Text
-                    if string.match(string.lower(desc.Text), "kg") then
-                        hasKg = true
-                    end
-                end
+    for _, item in pairs(bestDirectory:GetChildren()) do
+        local itemNameLower = string.lower(item.Name)
+        local foundBaseName = nil
+
+        -- Mencocokkan nama dengan kamus untuk mengabaikan varian (mutasi)
+        for _, baseName in ipairs(validFishNames) do
+            if string.find(itemNameLower, string.lower(baseName), 1, true) then
+                foundBaseName = baseName
+                break
             end
+        end
 
-            -- Jika ini benar-benar kotak ikan (karena ada informasi kg)
-            if hasKg then
-                local cardTextLower = string.lower(cardText)
-                local foundBaseName = nil
-
-                -- Cocokkan teks dengan daftar nama ikan asli
-                for _, baseName in ipairs(validFishNames) do
-                    -- Mencari nama ikan dasar di dalam seluruh teks kartu
-                    if string.find(cardTextLower, string.lower(baseName), 1, true) then
-                        foundBaseName = baseName
-                        break
-                    end
-                end
-
-                if foundBaseName then
-                    fishCounts[foundBaseName] = (fishCounts[foundBaseName] or 0) + 1
-                    totalFish = totalFish + 1
-                end
-            end
+        -- Jika ikan valid, masukkan ke laporan
+        if foundBaseName then
+            fishCounts[foundBaseName] = (fishCounts[foundBaseName] or 0) + 1
+            validFishCount = validFishCount + 1
         end
     end
 
-    return fishCounts, totalFish, "Database Match Sukses"
+    local dirPath = bestDirectory:GetFullName()
+    -- Memotong nama path jika terlalu panjang agar rapi di Discord
+    if string.len(dirPath) > 50 then
+        dirPath = "..." .. string.sub(dirPath, -47)
+    end
+
+    return fishCounts, validFishCount, totalItemsInDir, dirPath
 end
 
 local isProcessing = false
@@ -172,29 +175,48 @@ CheckButton.MouseButton1Click:Connect(function()
     isProcessing = true
     
     local player = Players.LocalPlayer
-    CheckButton.Text = "Memindai Data..."
+    
+    StatusLabel.Text = "1. Mengambil Kamus Ikan..."
+    CheckButton.Text = "Memproses..."
     CheckButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
+    task.wait(0.5) -- Sedikit delay agar UI sempat update
     
-    local fishCounts, totalFish, statusMsg = scanInventoryAccurately(player)
-    
-    if not fishCounts then
-        StatusLabel.Text = statusMsg
+    local validFishNames = buildFishDictionary()
+    if #validFishNames == 0 then
+        StatusLabel.Text = "Error: Kamus Local.Storage Kosong!"
         StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         CheckButton.Text = "Gagal"
         task.wait(2)
-        CheckButton.Text = "Cek Tas & Kirim"
+        CheckButton.Text = "Cari Tas & Kirim"
         CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
         isProcessing = false
         return
     end
 
-    StatusLabel.Text = "Lokasi: " .. statusMsg
-    StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-    CheckButton.Text = "Mengirim ke Discord..."
+    StatusLabel.Text = "2. Melacak Direktori Tas..."
+    task.wait(0.5)
+    
+    -- Menjalankan pencari direktori
+    local fishCounts, validFishCount, totalItemsInDir, dirPath = locateAndReadInventory(player, validFishNames)
+    
+    if not fishCounts then
+        StatusLabel.Text = dirPath -- Menampilkan pesan error
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        CheckButton.Text = "Tas Tidak Fisik"
+        task.wait(3)
+        CheckButton.Text = "Cari Tas & Kirim"
+        CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+        isProcessing = false
+        return
+    end
 
+    StatusLabel.Text = "Direktori Ditemukan!"
+    StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    CheckButton.Text = "Mengirim Data..."
+
+    -- Menyusun Laporan
     local description = ""
-    if totalFish > 0 then
-        -- Mengurutkan nama ikan sesuai abjad untuk laporan
+    if validFishCount > 0 then
         local sortedNames = {}
         for name in pairs(fishCounts) do table.insert(sortedNames, name) end
         table.sort(sortedNames)
@@ -206,6 +228,11 @@ CheckButton.MouseButton1Click:Connect(function()
         description = "Tas saat ini kosong."
     end
 
+    -- Mencegah pesan error Discord karena kepanjangan
+    if string.len(description) > 3900 then
+        description = string.sub(description, 1, 3900) .. "\n\n*[Data terpotong karena batas Discord]*"
+    end
+
     local payload = {
         ["username"] = player.Name .. " Radar",
         ["embeds"] = {{
@@ -213,7 +240,8 @@ CheckButton.MouseButton1Click:Connect(function()
             ["description"] = description,
             ["color"] = 3447003,
             ["footer"] = {
-                ["text"] = "Total Ikan: " .. totalFish .. " | System: Dict Scrape"
+                -- Menampilkan format X/Y (Valid Fish / Total Items In Folder) dan lokasi direktori
+                ["text"] = "Total Ikan: " .. validFishCount .. "/" .. totalItemsInDir .. " | Path: " .. dirPath
             }
         }}
     }
@@ -236,20 +264,18 @@ CheckButton.MouseButton1Click:Connect(function()
             CheckButton.Text = "Berhasil Dikirim!"
             CheckButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
         else
-            CheckButton.Text = "Gagal Mengirim!"
+            CheckButton.Text = "Gagal Webhook!"
             CheckButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-            StatusLabel.Text = "Error Webhook!"
-            StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         end
     else
-        CheckButton.Text = "Executor Tidak Support"
+        CheckButton.Text = "Executor Tdk Support"
         CheckButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
     end
 
     task.wait(3)
-    StatusLabel.Text = "Mode: Smart Dict Match"
+    StatusLabel.Text = "Mode: Directory Locator"
     StatusLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    CheckButton.Text = "Cek Tas & Kirim"
+    CheckButton.Text = "Cari Tas & Kirim"
     CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
     isProcessing = false
 end)
