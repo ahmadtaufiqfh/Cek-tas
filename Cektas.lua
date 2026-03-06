@@ -6,7 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local WebhookURL = "https://discord.com/api/webhooks/1455443365964419264/BUP-YUDGDbCZp6XiVaqDyC62_OWh8N_aOTFotkzs5qwujXzYgnzDSXbiBmjNt9QyccDs"
 
 -- ==========================================
--- PEMBUATAN UI (SMART MEMORY MAPPER V7.2)
+-- PEMBUATAN UI (HYBRID RADAR V8.1)
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
 local MainFrame = Instance.new("Frame")
@@ -32,10 +32,10 @@ UICorner1.CornerRadius = UDim.new(0, 8)
 
 TitleLabel.Name = "TitleLabel"
 TitleLabel.Parent = MainFrame
-TitleLabel.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
+TitleLabel.BackgroundColor3 = Color3.fromRGB(220, 20, 60) -- Merah Sniper
 TitleLabel.Size = UDim2.new(1, 0, 0, 30)
 TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.Text = "🧠 MEMORY RADAR V7.2"
+TitleLabel.Text = "🎯 HYBRID RADAR V8"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 13
 local UICorner2 = Instance.new("UICorner")
@@ -48,8 +48,8 @@ StatusLabel.BackgroundTransparency = 1
 StatusLabel.Position = UDim2.new(0, 0, 0, 35)
 StatusLabel.Size = UDim2.new(1, 0, 0, 25)
 StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.Text = "Precision Filter: ON"
-StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+StatusLabel.Text = "Wajib buka tas sblm scan!"
+StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
 StatusLabel.TextSize = 11
 StatusLabel.TextWrapped = true
 
@@ -59,7 +59,7 @@ CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
 CheckButton.Position = UDim2.new(0.1, 0, 0.55, 0)
 CheckButton.Size = UDim2.new(0.8, 0, 0, 40)
 CheckButton.Font = Enum.Font.GothamBold
-CheckButton.Text = "Scan Memori & Kirim"
+CheckButton.Text = "Kunci Target & Scan"
 CheckButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 CheckButton.TextSize = 13
 local UICorner3 = Instance.new("UICorner")
@@ -67,11 +67,10 @@ UICorner3.Parent = CheckButton
 UICorner3.CornerRadius = UDim.new(0, 8)
 
 -- ==========================================
--- LOGIKA ANTI-FREEZE & PRECISION FILTERING
+-- LOGIKA V8: UI TARGET + SIZE FILTERING
 -- ==========================================
 
--- Filter untuk membuang item non-ikan
-local ignoreWords = {"plaque", "rod", "gear", "cup", "watch", "hammer", "bait", "coin"}
+local ignoreWords = {"plaque", "rod", "gear", "cup", "watch", "hammer", "bait", "coin", "token", "shard", "crate"}
 local function isIgnored(name)
     local lower = string.lower(name)
     for _, word in ipairs(ignoreWords) do
@@ -85,7 +84,6 @@ local function fetchDictionary()
     local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
     if itemsFolder then
         for _, item in pairs(itemsFolder:GetChildren()) do
-            -- Abaikan item sampah dari awal
             if not isIgnored(item.Name) then
                 table.insert(validFishNames, item.Name)
             end
@@ -95,9 +93,28 @@ local function fetchDictionary()
     return validFishNames
 end
 
+local function getTargetCountFromUI(player)
+    local target = 0
+    local playerGui = player:WaitForChild("PlayerGui")
+    
+    for _, obj in pairs(playerGui:GetDescendants()) do
+        if obj:IsA("TextLabel") then
+            local currentStr = string.match(obj.Text, "(%d+,?%d*)%s*/%s*%d+,?%d*")
+            if currentStr then
+                currentStr = string.gsub(currentStr, ",", "")
+                local num = tonumber(currentStr)
+                if num and num > target then
+                    target = num
+                end
+            end
+        end
+    end
+    return target
+end
+
 local isProcessing = false
 
-local function startSafeMemoryScan(player, validFishNames)
+local function startSafeMemoryScan(player, validFishNames, targetCount)
     task.spawn(function()
         local gc = getgc(true)
         local totalObjects = #gc
@@ -105,76 +122,74 @@ local function startSafeMemoryScan(player, validFishNames)
         local highestTotal = 0
         
         for i, obj in ipairs(gc) do
-            -- Jeda Anti-Freeze (Bernapas tiap 2000 objek)
-            if i % 2000 == 0 then
+            if i % 2500 == 0 then
                 local percent = math.floor((i / totalObjects) * 100)
-                StatusLabel.Text = "Menganalisis... " .. percent .. "%"
+                StatusLabel.Text = "Menyisir... " .. percent .. "%"
                 task.wait() 
             end
             
             if type(obj) == "table" then
-                local tempCounts = {}
-                local tempTotal = 0
-                local masterDictionaryKeys = 0
-                local validInventoryKeys = 0
+                -- V8 MAGIC: Menghitung ukuran tabel terlebih dahulu
+                local keyCount = 0
+                for _ in pairs(obj) do keyCount = keyCount + 1 end
+                
+                -- Hanya mengecek tabel yang isinya mendekati target layar (Minimal 80% dari target)
+                local minimumRequired = math.floor(targetCount * 0.8)
+                if minimumRequired < 1 then minimumRequired = 1 end
+                
+                if keyCount >= minimumRequired and keyCount <= targetCount + 1000 then
+                    local tempCounts = {}
+                    local tempTotal = 0
+                    local isMasterDict = false
+                    local exactMatches = 0
 
-                pcall(function()
-                    local checks = 0
-                    for key, value in pairs(obj) do
-                        checks = checks + 1
-                        
-                        -- Ciri khas item tas: value nya BUKAN string, melainkan Tabel Data (punya stats)
-                        if type(value) == "table" then
-                            local itemName = rawget(value, "Name") or rawget(value, "name") or rawget(value, "Item") or rawget(value, "Id")
-                            
-                            if type(itemName) == "string" then
-                                -- MENCEGAH BUG ENSIKLOPEDIA: Jika kunci(key) sama persis dengan nama item, ini adalah Ensiklopedia Game!
-                                if key == itemName then
-                                    masterDictionaryKeys = masterDictionaryKeys + 1
-                                else
-                                    -- Ini adalah struktur Tas Asli (menggunakan UUID/Index sebagai key)
-                                    validInventoryKeys = validInventoryKeys + 1
-                                    
-                                    local lowerName = string.lower(itemName)
-                                    local foundBaseName = nil
+                    pcall(function()
+                        for key, value in pairs(obj) do
+                            if type(value) == "table" then
+                                local itemName = rawget(value, "Name") or rawget(value, "name") or rawget(value, "Id") or rawget(value, "Item")
+                                
+                                if type(itemName) == "string" then
+                                    if key == itemName then
+                                        exactMatches = exactMatches + 1
+                                    else
+                                        local lowerName = string.lower(itemName)
+                                        local foundBaseName = nil
 
-                                    for _, baseName in ipairs(validFishNames) do
-                                        if string.find(lowerName, string.lower(baseName), 1, true) then
-                                            foundBaseName = baseName
-                                            break
+                                        for _, baseName in ipairs(validFishNames) do
+                                            if string.find(lowerName, string.lower(baseName), 1, true) then
+                                                foundBaseName = baseName
+                                                break
+                                            end
                                         end
-                                    end
 
-                                    if foundBaseName then
-                                        tempCounts[foundBaseName] = (tempCounts[foundBaseName] or 0) + 1
-                                        tempTotal = tempTotal + 1
+                                        if foundBaseName then
+                                            tempCounts[foundBaseName] = (tempCounts[foundBaseName] or 0) + 1
+                                            tempTotal = tempTotal + 1
+                                        end
                                     end
                                 end
                             end
                         end
+                    end)
 
-                        -- EXIT CEPAT: Jika di 15 entri pertama tidak ada struktur tas sama sekali, lewati tabel ini!
-                        if checks == 15 and validInventoryKeys == 0 and masterDictionaryKeys == 0 then
-                            break
-                        end
+                    -- Filter agar tidak menjaring ensiklopedia utama game
+                    if exactMatches > (tempTotal * 0.5) then
+                        isMasterDict = true
                     end
-                end)
 
-                -- SYARAT MUTLAK TAS: Tidak boleh lebih banyak Master Keys daripada Valid Keys
-                if masterDictionaryKeys > validInventoryKeys then
-                    -- Abaikan tabel ini, ini adalah kamus server!
-                elseif tempTotal > highestTotal then
-                    highestTotal = tempTotal
-                    bestCounts = tempCounts
+                    if not isMasterDict and tempTotal > highestTotal then
+                        highestTotal = tempTotal
+                        bestCounts = tempCounts
+                    end
                 end
             end
         end
 
         -- SELESAI SCANNING
         if highestTotal > 0 then
-            StatusLabel.Text = "Target Locked: " .. highestTotal .. " Ikan!"
+            StatusLabel.Text = "Bingo! " .. highestTotal .. " Ikan Terkunci."
             StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-            CheckButton.Text = "Mengirim Discord..."
+            CheckButton.Text = "Proses Discord..."
             
             local description = ""
             local sortedNames = {}
@@ -186,17 +201,17 @@ local function startSafeMemoryScan(player, validFishNames)
             end
 
             if string.len(description) > 3900 then
-                description = string.sub(description, 1, 3900) .. "\n\n*[Data terpotong karena batas Discord]*"
+                description = string.sub(description, 1, 3900) .. "\n\n*[Data terpotong karena batas limit Discord]*"
             end
 
             local payload = {
                 ["username"] = player.Name .. " Radar",
                 ["embeds"] = {{
-                    ["title"] = "🎒 Laporan Isi Tas (Deep Memory Hook)",
+                    ["title"] = "🎒 Laporan Isi Tas (V8 Target Scraper)",
                     ["description"] = description,
-                    ["color"] = 9055202,
+                    ["color"] = 14423100,
                     ["footer"] = {
-                        ["text"] = "Total Ikan Asli: " .. highestTotal .. " | V7.2 Precision Scraper"
+                        ["text"] = "UI Target: " .. targetCount .. " | Ikan Asli Terbaca: " .. highestTotal
                     }
                 }}
             }
@@ -217,16 +232,16 @@ local function startSafeMemoryScan(player, validFishNames)
                 CheckButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
             end
         else
-            StatusLabel.Text = "Tas kosong atau tidak sinkron."
+            StatusLabel.Text = "Tabel data tdk sinkron dgn UI ("..targetCount..")."
             StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
             CheckButton.Text = "Gagal Menemukan"
             CheckButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
         end
 
         task.wait(3)
-        StatusLabel.Text = "Precision Filter: ON"
-        StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
-        CheckButton.Text = "Scan Memori & Kirim"
+        StatusLabel.Text = "Wajib buka tas sblm scan!"
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+        CheckButton.Text = "Kunci Target & Scan"
         CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
         isProcessing = false
     end)
@@ -237,20 +252,39 @@ CheckButton.MouseButton1Click:Connect(function()
     isProcessing = true
     
     local player = Players.LocalPlayer
-    CheckButton.Text = "Menyiapkan Scan..."
+    
+    CheckButton.Text = "Melacak UI..."
     CheckButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
     
-    local validFishNames = fetchDictionary()
-    if #validFishNames == 0 then
-        StatusLabel.Text = "Gagal memuat Kamus."
+    -- MENGAMBIL ANGKA DARI LAYAR (Contoh: 682/4500)
+    local targetCount = getTargetCountFromUI(player)
+    
+    if targetCount == 0 then
+        StatusLabel.Text = "Buka tas dulu agar angka (X/4500) terbaca!"
         StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-        CheckButton.Text = "Error"
+        CheckButton.Text = "Tas Tertutup"
         task.wait(2)
-        CheckButton.Text = "Scan Memori & Kirim"
+        CheckButton.Text = "Kunci Target & Scan"
         CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
         isProcessing = false
         return
     end
 
-    startSafeMemoryScan(player, validFishNames)
+    StatusLabel.Text = "Target Dikunci: " .. targetCount
+    StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
+    task.wait(0.5)
+    
+    local validFishNames = fetchDictionary()
+    if #validFishNames == 0 then
+        StatusLabel.Text = "Error Kamus Game."
+        StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        CheckButton.Text = "Gagal"
+        task.wait(2)
+        CheckButton.Text = "Kunci Target & Scan"
+        CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
+        isProcessing = false
+        return
+    end
+
+    startSafeMemoryScan(player, validFishNames, targetCount)
 end)
