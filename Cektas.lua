@@ -6,7 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local WebhookURL = "https://discord.com/api/webhooks/1455443365964419264/BUP-YUDGDbCZp6XiVaqDyC62_OWh8N_aOTFotkzs5qwujXzYgnzDSXbiBmjNt9QyccDs"
 
 -- ==========================================
--- PEMBUATAN UI (SMART MEMORY MAPPER V7.1)
+-- PEMBUATAN UI (SMART MEMORY MAPPER V7.2)
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
 local MainFrame = Instance.new("Frame")
@@ -35,7 +35,7 @@ TitleLabel.Parent = MainFrame
 TitleLabel.BackgroundColor3 = Color3.fromRGB(138, 43, 226)
 TitleLabel.Size = UDim2.new(1, 0, 0, 30)
 TitleLabel.Font = Enum.Font.GothamBold
-TitleLabel.Text = "🧠 MEMORY RADAR V7.1"
+TitleLabel.Text = "🧠 MEMORY RADAR V7.2"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextSize = 13
 local UICorner2 = Instance.new("UICorner")
@@ -48,7 +48,7 @@ StatusLabel.BackgroundTransparency = 1
 StatusLabel.Position = UDim2.new(0, 0, 0, 35)
 StatusLabel.Size = UDim2.new(1, 0, 0, 25)
 StatusLabel.Font = Enum.Font.Gotham
-StatusLabel.Text = "Anti-Freeze Enabled"
+StatusLabel.Text = "Precision Filter: ON"
 StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
 StatusLabel.TextSize = 11
 StatusLabel.TextWrapped = true
@@ -67,15 +67,28 @@ UICorner3.Parent = CheckButton
 UICorner3.CornerRadius = UDim.new(0, 8)
 
 -- ==========================================
--- LOGIKA ANTI-FREEZE DEEP SCANNING
+-- LOGIKA ANTI-FREEZE & PRECISION FILTERING
 -- ==========================================
+
+-- Filter untuk membuang item non-ikan
+local ignoreWords = {"plaque", "rod", "gear", "cup", "watch", "hammer", "bait", "coin"}
+local function isIgnored(name)
+    local lower = string.lower(name)
+    for _, word in ipairs(ignoreWords) do
+        if string.find(lower, word) then return true end
+    end
+    return false
+end
 
 local function fetchDictionary()
     local validFishNames = {}
     local itemsFolder = ReplicatedStorage:FindFirstChild("Items")
     if itemsFolder then
         for _, item in pairs(itemsFolder:GetChildren()) do
-            table.insert(validFishNames, item.Name)
+            -- Abaikan item sampah dari awal
+            if not isIgnored(item.Name) then
+                table.insert(validFishNames, item.Name)
+            end
         end
         table.sort(validFishNames, function(a, b) return string.len(a) > string.len(b) end)
     end
@@ -84,7 +97,6 @@ end
 
 local isProcessing = false
 
--- Fungsi memindai dengan Jeda (Yield) agar game tidak macet
 local function startSafeMemoryScan(player, validFishNames)
     task.spawn(function()
         local gc = getgc(true)
@@ -93,62 +105,74 @@ local function startSafeMemoryScan(player, validFishNames)
         local highestTotal = 0
         
         for i, obj in ipairs(gc) do
-            -- Memberi nafas (jeda) setiap 1500 objek yang dicek
-            if i % 1500 == 0 then
+            -- Jeda Anti-Freeze (Bernapas tiap 2000 objek)
+            if i % 2000 == 0 then
                 local percent = math.floor((i / totalObjects) * 100)
-                StatusLabel.Text = "Menyisir... " .. percent .. "%"
-                task.wait() -- INI KUNCI AGAR LAYAR TIDAK FREEZE
+                StatusLabel.Text = "Menganalisis... " .. percent .. "%"
+                task.wait() 
             end
             
             if type(obj) == "table" then
                 local tempCounts = {}
                 local tempTotal = 0
-                local matchFoundInTable = false
+                local masterDictionaryKeys = 0
+                local validInventoryKeys = 0
 
                 pcall(function()
                     local checks = 0
                     for key, value in pairs(obj) do
                         checks = checks + 1
                         
-                        local fishDataName = nil
-                        -- Menggunakan rawget untuk mencegah error metamethod
+                        -- Ciri khas item tas: value nya BUKAN string, melainkan Tabel Data (punya stats)
                         if type(value) == "table" then
-                            fishDataName = rawget(value, "Name") or rawget(value, "name") or rawget(value, "Id")
-                        elseif type(value) == "string" then
-                            fishDataName = value
-                        end
+                            local itemName = rawget(value, "Name") or rawget(value, "name") or rawget(value, "Item") or rawget(value, "Id")
+                            
+                            if type(itemName) == "string" then
+                                -- MENCEGAH BUG ENSIKLOPEDIA: Jika kunci(key) sama persis dengan nama item, ini adalah Ensiklopedia Game!
+                                if key == itemName then
+                                    masterDictionaryKeys = masterDictionaryKeys + 1
+                                else
+                                    -- Ini adalah struktur Tas Asli (menggunakan UUID/Index sebagai key)
+                                    validInventoryKeys = validInventoryKeys + 1
+                                    
+                                    local lowerName = string.lower(itemName)
+                                    local foundBaseName = nil
 
-                        if type(fishDataName) == "string" then
-                            local lowerName = string.lower(fishDataName)
-                            for _, baseName in ipairs(validFishNames) do
-                                if string.find(lowerName, string.lower(baseName), 1, true) then
-                                    tempCounts[baseName] = (tempCounts[baseName] or 0) + 1
-                                    tempTotal = tempTotal + 1
-                                    matchFoundInTable = true
-                                    break
+                                    for _, baseName in ipairs(validFishNames) do
+                                        if string.find(lowerName, string.lower(baseName), 1, true) then
+                                            foundBaseName = baseName
+                                            break
+                                        end
+                                    end
+
+                                    if foundBaseName then
+                                        tempCounts[foundBaseName] = (tempCounts[foundBaseName] or 0) + 1
+                                        tempTotal = tempTotal + 1
+                                    end
                                 end
                             end
                         end
 
-                        -- FILTER CERDAS: Jika sudah cek 10 item pertama di tabel ini 
-                        -- dan tidak ada satupun yang mirip ikan, langsung batalkan tabel ini!
-                        if checks == 10 and not matchFoundInTable then
+                        -- EXIT CEPAT: Jika di 15 entri pertama tidak ada struktur tas sama sekali, lewati tabel ini!
+                        if checks == 15 and validInventoryKeys == 0 and masterDictionaryKeys == 0 then
                             break
                         end
                     end
                 end)
 
-                -- Simpan tabel dengan jumlah ikan terbanyak
-                if matchFoundInTable and tempTotal > highestTotal then
+                -- SYARAT MUTLAK TAS: Tidak boleh lebih banyak Master Keys daripada Valid Keys
+                if masterDictionaryKeys > validInventoryKeys then
+                    -- Abaikan tabel ini, ini adalah kamus server!
+                elseif tempTotal > highestTotal then
                     highestTotal = tempTotal
                     bestCounts = tempCounts
                 end
             end
         end
 
-        -- SELESAI SCANNING: Lanjut Proses Discord
+        -- SELESAI SCANNING
         if highestTotal > 0 then
-            StatusLabel.Text = "Ditemukan " .. highestTotal .. " Ikan!"
+            StatusLabel.Text = "Target Locked: " .. highestTotal .. " Ikan!"
             StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
             CheckButton.Text = "Mengirim Discord..."
             
@@ -162,51 +186,45 @@ local function startSafeMemoryScan(player, validFishNames)
             end
 
             if string.len(description) > 3900 then
-                description = string.sub(description, 1, 3900) .. "\n\n*[Data terpotong karena batas limit Discord]*"
+                description = string.sub(description, 1, 3900) .. "\n\n*[Data terpotong karena batas Discord]*"
             end
 
             local payload = {
                 ["username"] = player.Name .. " Radar",
                 ["embeds"] = {{
-                    ["title"] = "🎒 Laporan Isi Tas (Memory Extracted)",
+                    ["title"] = "🎒 Laporan Isi Tas (Deep Memory Hook)",
                     ["description"] = description,
                     ["color"] = 9055202,
                     ["footer"] = {
-                        ["text"] = "Total Ikan: " .. highestTotal .. " | System: getgc() Mapper V7.1"
+                        ["text"] = "Total Ikan Asli: " .. highestTotal .. " | V7.2 Precision Scraper"
                     }
                 }}
             }
 
             local httprequest = (syn and syn.request) or (http and http.request) or http_request or (fluxus and fluxus.request) or request
-
             if httprequest then
-                local success, _ = pcall(function()
+                pcall(function()
                     httprequest({
                         Url = WebhookURL, Method = "POST",
                         Headers = {["Content-Type"] = "application/json"},
                         Body = HttpService:JSONEncode(payload)
                     })
                 end)
-                if success then
-                    CheckButton.Text = "Berhasil Dikirim!"
-                    CheckButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
-                else
-                    CheckButton.Text = "Gagal Webhook!"
-                    CheckButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
-                end
+                CheckButton.Text = "Berhasil Dikirim!"
+                CheckButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
             else
                 CheckButton.Text = "Exe Tdk Support"
                 CheckButton.BackgroundColor3 = Color3.fromRGB(200, 0, 0)
             end
         else
-            StatusLabel.Text = "Data tidak ditemukan di memori."
+            StatusLabel.Text = "Tas kosong atau tidak sinkron."
             StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
-            CheckButton.Text = "Tas Kosong / Gagal"
+            CheckButton.Text = "Gagal Menemukan"
             CheckButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
         end
 
         task.wait(3)
-        StatusLabel.Text = "Anti-Freeze Enabled"
+        StatusLabel.Text = "Precision Filter: ON"
         StatusLabel.TextColor3 = Color3.fromRGB(100, 255, 100)
         CheckButton.Text = "Scan Memori & Kirim"
         CheckButton.BackgroundColor3 = Color3.fromRGB(0, 120, 215)
@@ -219,15 +237,12 @@ CheckButton.MouseButton1Click:Connect(function()
     isProcessing = true
     
     local player = Players.LocalPlayer
-    
     CheckButton.Text = "Menyiapkan Scan..."
     CheckButton.BackgroundColor3 = Color3.fromRGB(150, 150, 150)
-    StatusLabel.Text = "Mengekstrak Kamus..."
-    StatusLabel.TextColor3 = Color3.fromRGB(255, 255, 100)
     
     local validFishNames = fetchDictionary()
     if #validFishNames == 0 then
-        StatusLabel.Text = "Gagal memuat Kamus Game."
+        StatusLabel.Text = "Gagal memuat Kamus."
         StatusLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
         CheckButton.Text = "Error"
         task.wait(2)
@@ -237,6 +252,5 @@ CheckButton.MouseButton1Click:Connect(function()
         return
     end
 
-    -- Memulai proses scan memori berat di latar belakang (tanpa freeze)
     startSafeMemoryScan(player, validFishNames)
 end)
