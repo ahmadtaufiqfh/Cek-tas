@@ -1,35 +1,47 @@
--- Kita gunakan "leviathan" karena ada di daftar tas kamu (Big Leviathan)
-local targetFish = "leviathan"
+local player = game.Players.LocalPlayer
+local targetFish = "leviathan" -- Tetap pakai ikan ini sebagai pelacak
 
-print("🔍 Memulai pemindaian super untuk mencari: '" .. targetFish .. "'...")
+print("🕵️‍♂️ Mencari brankas data tas di latar belakang...")
 
-local function searchDirectory(directory)
-    local foundSomething = false
-    -- Menggunakan pcall agar script tidak error jika ada folder yang dikunci game
+local found = false
+
+local function scanVault(directory)
     pcall(function()
-        for _, item in pairs(directory:GetDescendants()) do
-            if string.find(string.lower(item.Name), string.lower(targetFish)) then
+        for _, obj in pairs(directory:GetDescendants()) do
+            local path = obj:GetFullName()
+            
+            -- KITA ABAIKAN KAMUS GAME & UI agar tidak muncul hasil palsu
+            if string.find(path, "ReplicatedStorage.Items") or 
+               string.find(path, "ReplicatedStorage.Variants") or
+               string.find(path, "PlayerGui") or 
+               string.find(path, "CmdrClient") then
+                continue
+            end
+
+            -- Jika nama objek mengandung leviathan
+            if string.find(string.lower(obj.Name), targetFish) then
                 print("-------------------------------------------------")
-                print("✅ DITEMUKAN!")
-                print("Nama Objek : " .. item.Name)
-                print("Tipe Objek : " .. item.ClassName)
-                print("Lokasi/Path: " .. item:GetFullName())
-                if item:IsA("ValueBase") then
-                    print("Isi Value  : " .. tostring(item.Value))
+                print("✅ POTENSI DATA TAS DITEMUKAN!")
+                print("Nama Objek : " .. obj.Name)
+                print("Tipe Objek : " .. obj.ClassName)
+                print("Lokasi/Path: " .. path)
+                
+                if obj:IsA("ValueBase") then
+                    print("Isi Value  : " .. tostring(obj.Value))
                 end
                 print("-------------------------------------------------")
-                foundSomething = true
+                found = true
             end
         end
     end)
-    return foundSomething
 end
 
-local foundInPlayer = searchDirectory(game.Players.LocalPlayer)
-local foundInReplicated = searchDirectory(game:GetService("ReplicatedStorage"))
+-- Memindai karakter/data pemain
+scanVault(player)
+-- Memindai tempat penyimpanan umum server
+scanVault(game:GetService("ReplicatedStorage"))
 
-if not foundInPlayer and not foundInReplicated then
-    warn("❌ Masih tidak ditemukan. Game mungkin menyandikan (enkripsi) nama itemnya.")
+if not found then
+    warn("❌ Data tidak ditemukan dalam bentuk objek. Game sepertinya menggunakan 'ModuleScript' atau 'RemoteFunction'.")
 end
-
-print("🏁 Pelacakan selesai! Silakan cek konsol (F9).")
+print("🏁 Pemindaian latar belakang selesai! Silakan cek F9.")
